@@ -2,6 +2,9 @@ import javax.swing.*;
 import java.awt.*;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.lang.reflect.Array;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 
 public class GUI extends JFrame {
 
@@ -10,7 +13,10 @@ public class GUI extends JFrame {
         int width = 400, height = 400;
         this.setSize(width, height);
         this.setDefaultCloseOperation(this.EXIT_ON_CLOSE);
+
         JPanel panel = new JPanel(new GridBagLayout());
+        JPanel devicesPanel = new JPanel(new BorderLayout());
+
 
         JLabel pathLabel;
         JLabel deviceLabel;
@@ -27,8 +33,8 @@ public class GUI extends JFrame {
         };
 
         refreshButton.addActionListener(e -> {
-            String cmd = pathLabel.getText() + "/adb devices";
-            deviceLabel.setText(this.adbDevices(cmd));
+            String adbPath = pathLabel.getText();
+            deviceLabel.setText(devices(adbPath).toString());
         });
 
         // 选择文件夹（仅目录）
@@ -68,25 +74,34 @@ public class GUI extends JFrame {
         new GUI();
     }
 
-    public String adbDevices(String cmd) {
+    public ArrayList<String> devices(String adbPath) {
+        ArrayList<String> devicesId = new ArrayList<>();
+        ArrayList<String> cmdStr = execCMD(adbPath + "/adb devices");
+        for (String s : cmdStr) {
+            if (s.indexOf("\t") > 0) {
+                System.out.println(devicesId.add(s.replace("\tdevice", "")));
+            }
+        }
+        return devicesId;
+    }
+
+    public ArrayList<String> execCMD(String cmd) {
         try {
             Process process = Runtime.getRuntime().exec(cmd);
             BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), "UTF-8"));
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
             String line;
-            String deviceId = null;
+            ArrayList<String> cmdOutput = new ArrayList<>();
             while ((line = reader.readLine()) != null) {
-                if (line.indexOf("\t") > 0) {
-                    System.out.println(deviceId = line.replace("\tdevice", ""));
-                }
+                cmdOutput.add(line);
             }
             // 等待命令执行完成
             int exitCode = process.waitFor();
             System.out.println("退出码: " + exitCode);
-            return deviceId;
+            return cmdOutput;
         } catch (Exception e) {
             e.printStackTrace();
         }
-        return null;
+        return new ArrayList<>();
     }
 }
