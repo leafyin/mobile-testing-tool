@@ -2,7 +2,6 @@ import javax.swing.*;
 import java.awt.*;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.lang.reflect.Array;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 
@@ -15,8 +14,6 @@ public class GUI extends JFrame {
         this.setDefaultCloseOperation(this.EXIT_ON_CLOSE);
 
         JPanel panel = new JPanel(new GridBagLayout());
-        JPanel devicesPanel = new JPanel(new BorderLayout());
-
 
         JLabel pathLabel;
         JLabel deviceLabel;
