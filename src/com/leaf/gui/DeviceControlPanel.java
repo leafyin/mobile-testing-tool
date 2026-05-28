@@ -1,0 +1,307 @@
+package com.leaf.gui;
+
+import com.leaf.model.RemoteEntry;
+import com.leaf.service.AdbService;
+import com.leaf.service.ScrcpyService;
+
+import javax.swing.*;
+import java.awt.*;
+import java.util.List;
+import java.util.stream.Collectors;
+
+public class DeviceControlPanel extends JPanel {
+
+    private static final int KEYCODE_HOME = 3;
+    private static final int KEYCODE_BACK = 4;
+    private static final int KEYCODE_POWER = 26;
+    private static final int KEYCODE_VOLUME_UP = 24;
+    private static final int KEYCODE_VOLUME_DOWN = 25;
+    private static final int KEYCODE_ENTER = 66;
+
+    private final JLabel deviceLabel = new JLabel("未选择设备");
+    private final JLabel pathLabel = new JLabel(AdbService.SD_CARD_PATH);
+    private final DefaultListModel<RemoteEntry> fileModel = new DefaultListModel<>();
+    private final JList<RemoteEntry> fileList = new JList<>(fileModel);
+    private final JPanel controlContent = new JPanel(new BorderLayout(8, 8));
+    private final JButton previewButton = new JButton("开始预览");
+    private final ScrcpyService scrcpyService = new ScrcpyService();
+    private final Timer previewStateTimer;
+
+    private AdbService adbService;
+    private String scrcpyPath;
+    private String currentPath = AdbService.SD_CARD_PATH;
+
+    public DeviceControlPanel() {
+        super(new BorderLayout(8, 8));
+        setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+
+        previewStateTimer = new Timer(1000, e -> updatePreviewButtonState());
+        previewStateTimer.start();
+        previewButton.addActionListener(e -> togglePreview());
+
+        controlContent.add(buildPlaceholder(), BorderLayout.CENTER);
+        add(controlContent, BorderLayout.CENTER);
+    }
+
+    public void setScrcpyPath(String scrcpyPath) {
+        this.scrcpyPath = scrcpyPath;
+    }
+
+    public void setDevice(AdbService service) {
+        if (scrcpyService.isRunning()) {
+            if (service == null || !service.getDeviceId().equals(scrcpyService.getRunningDeviceId())) {
+                scrcpyService.stop();
+            }
+        }
+
+        this.adbService = service;
+        if (service == null) {
+            controlContent.removeAll();
+            controlContent.add(buildPlaceholder(), BorderLayout.CENTER);
+            controlContent.revalidate();
+            controlContent.repaint();
+            updatePreviewButtonState();
+            return;
+        }
+
+        deviceLabel.setText("当前设备: " + service.getDeviceId());
+        currentPath = AdbService.SD_CARD_PATH;
+        pathLabel.setText(currentPath);
+
+        controlContent.removeAll();
+        controlContent.add(buildControlPanel(), BorderLayout.CENTER);
+        controlContent.revalidate();
+        controlContent.repaint();
+
+        refreshFiles();
+        updatePreviewButtonState();
+    }
+
+    public void stopPreview() {
+        scrcpyService.stop();
+        updatePreviewButtonState();
+    }
+
+    private JPanel buildPlaceholder() {
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.add(new JLabel("请在左侧选择一台设备"));
+        return panel;
+    }
+
+    private JPanel buildControlPanel() {
+        JPanel panel = new JPanel(new BorderLayout(8, 8));
+
+        JPanel header = new JPanel(new BorderLayout(8, 4));
+        header.add(deviceLabel, BorderLayout.WEST);
+
+        JPanel previewPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        previewPanel.add(previewButton);
+        header.add(previewPanel, BorderLayout.EAST);
+        header.add(buildKeyEventPanel(), BorderLayout.SOUTH);
+
+        panel.add(header, BorderLayout.NORTH);
+        panel.add(buildFilePanel(), BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel buildKeyEventPanel() {
+        JPanel panel = new JPanel(new GridLayout(2, 4, 6, 6));
+        panel.setBorder(BorderFactory.createTitledBorder("设备控制"));
+
+        panel.add(actionButton("Home", () -> adbService.keyEvent(KEYCODE_HOME)));
+        panel.add(actionButton("返回", () -> adbService.keyEvent(KEYCODE_BACK)));
+        panel.add(actionButton("电源/关屏", () -> adbService.keyEvent(KEYCODE_POWER)));
+        panel.add(actionButton("音量+", () -> adbService.keyEvent(KEYCODE_VOLUME_UP)));
+        panel.add(actionButton("音量-", () -> adbService.keyEvent(KEYCODE_VOLUME_DOWN)));
+        panel.add(actionButton("确认", () -> adbService.keyEvent(KEYCODE_ENTER)));
+        panel.add(actionButton("输入文字", this::promptInputText));
+
+        return panel;
+    }
+
+    private JPanel buildFilePanel() {
+        JPanel panel = new JPanel(new BorderLayout(6, 6));
+        panel.setBorder(BorderFactory.createTitledBorder("SDCard 文件"));
+
+        fileList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+        fileList.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    openSelectedEntry();
+                }
+            }
+        });
+
+        JPanel toolbar = new JPanel(new BorderLayout(6, 0));
+        toolbar.add(pathLabel, BorderLayout.CENTER);
+
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        JButton upButton = new JButton("上级目录");
+        JButton refreshButton = new JButton("刷新");
+        JButton exportButton = new JButton("批量导出");
+        JButton mediaFilterButton = new JButton("仅媒体");
+
+        upButton.addActionListener(e -> navigateUp());
+        refreshButton.addActionListener(e -> refreshFiles());
+        exportButton.addActionListener(e -> exportSelectedFiles());
+        mediaFilterButton.addActionListener(e -> showMediaOnly());
+
+        buttons.add(upButton);
+        buttons.add(refreshButton);
+        buttons.add(mediaFilterButton);
+        buttons.add(exportButton);
+        toolbar.add(buttons, BorderLayout.EAST);
+
+        panel.add(toolbar, BorderLayout.NORTH);
+        panel.add(new JScrollPane(fileList), BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JButton actionButton(String text, Runnable action) {
+        JButton button = new JButton(text);
+        button.addActionListener(e -> {
+            if (adbService == null) {
+                return;
+            }
+            action.run();
+        });
+        return button;
+    }
+
+    private void togglePreview() {
+        if (adbService == null) {
+            return;
+        }
+        if (scrcpyService.isRunning()) {
+            scrcpyService.stop();
+            updatePreviewButtonState();
+            return;
+        }
+
+        try {
+            scrcpyService.start(scrcpyPath, adbService.getAdbPath(), adbService.getDeviceId(), message -> SwingUtilities.invokeLater(() -> {
+                updatePreviewButtonState();
+                JOptionPane.showMessageDialog(
+                        DeviceControlPanel.this,
+                        message,
+                        "预览失败",
+                        JOptionPane.ERROR_MESSAGE
+                );
+            }));
+            updatePreviewButtonState();
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    ex.getMessage(),
+                    "预览失败",
+                    JOptionPane.ERROR_MESSAGE
+            );
+        }
+    }
+
+    private void updatePreviewButtonState() {
+        boolean running = scrcpyService.isRunning()
+                && adbService != null
+                && adbService.getDeviceId().equals(scrcpyService.getRunningDeviceId());
+        previewButton.setText(running ? "停止预览" : "开始预览");
+    }
+
+    private void promptInputText() {
+        String text = JOptionPane.showInputDialog(this, "输入要发送到设备的文字（支持中文）:", "ADB 输入", JOptionPane.PLAIN_MESSAGE);
+        if (text != null && !text.isBlank()) {
+            adbService.inputText(text);
+        }
+    }
+
+    private void navigateUp() {
+        currentPath = AdbService.parentPath(currentPath);
+        pathLabel.setText(currentPath);
+        refreshFiles();
+    }
+
+    private void openSelectedEntry() {
+        RemoteEntry selected = fileList.getSelectedValue();
+        if (selected == null) {
+            return;
+        }
+        if (selected.isDirectory()) {
+            currentPath = selected.getPath();
+            pathLabel.setText(currentPath);
+            refreshFiles();
+        }
+    }
+
+    private void refreshFiles() {
+        if (adbService == null) {
+            return;
+        }
+        fileModel.clear();
+        AdbService.ListDirectoryResult result = adbService.listDirectory(currentPath);
+        for (RemoteEntry entry : result.entries) {
+            fileModel.addElement(entry);
+        }
+        if (!result.success) {
+            JOptionPane.showMessageDialog(this, "无法访问目录: " + currentPath, "错误", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void showMediaOnly() {
+        if (adbService == null) {
+            return;
+        }
+        fileModel.clear();
+        AdbService.ListDirectoryResult result = adbService.listDirectory(currentPath);
+        for (RemoteEntry entry : result.entries) {
+            if (entry.isDirectory() || entry.isMediaFile()) {
+                fileModel.addElement(entry);
+            }
+        }
+    }
+
+    private void exportSelectedFiles() {
+        List<RemoteEntry> selected = fileList.getSelectedValuesList();
+        if (selected.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "请先选择一个或多个文件");
+            return;
+        }
+
+        List<String> filePaths = selected.stream()
+                .filter(entry -> !entry.isDirectory())
+                .map(RemoteEntry::getPath)
+                .collect(Collectors.toList());
+
+        long dirCount = selected.stream().filter(RemoteEntry::isDirectory).count();
+        if (filePaths.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "请选择文件，不支持导出目录");
+            return;
+        }
+
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("选择导出目录");
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        String localDir = chooser.getSelectedFile().getAbsolutePath();
+        int successCount = adbService.pullMultiple(filePaths, localDir);
+        int failCount = filePaths.size() - successCount;
+
+        StringBuilder message = new StringBuilder();
+        message.append("成功导出 ").append(successCount).append(" / ").append(filePaths.size()).append(" 个文件到:\n").append(localDir);
+        if (dirCount > 0) {
+            message.append("\n已跳过 ").append(dirCount).append(" 个目录");
+        }
+        if (failCount > 0) {
+            message.append("\n失败 ").append(failCount).append(" 个文件");
+        }
+
+        JOptionPane.showMessageDialog(
+                this,
+                message.toString(),
+                failCount > 0 ? "部分导出失败" : "导出完成",
+                failCount > 0 ? JOptionPane.WARNING_MESSAGE : JOptionPane.INFORMATION_MESSAGE
+        );
+    }
+}
