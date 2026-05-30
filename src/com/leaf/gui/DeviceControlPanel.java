@@ -3,9 +3,11 @@ package com.leaf.gui;
 import com.leaf.model.RemoteEntry;
 import com.leaf.service.AdbService;
 import com.leaf.service.ScrcpyService;
+import com.leaf.utils.ConfigUtil;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -24,6 +26,8 @@ public class DeviceControlPanel extends JPanel {
     private final JList<RemoteEntry> fileList = new JList<>(fileModel);
     private final JPanel controlContent = new JPanel(new BorderLayout(8, 8));
     private final JButton previewButton = new JButton("开始预览");
+    private final DefaultComboBoxModel<String> inputHistoryModel = new DefaultComboBoxModel<>();
+    private final JComboBox<String> inputCombo = new JComboBox<>(inputHistoryModel);
     private final ScrcpyService scrcpyService = new ScrcpyService();
     private final Timer previewStateTimer;
 
@@ -38,6 +42,13 @@ public class DeviceControlPanel extends JPanel {
         previewStateTimer = new Timer(1000, e -> updatePreviewButtonState());
         previewStateTimer.start();
         previewButton.addActionListener(e -> togglePreview());
+
+        inputCombo.setEditable(true);
+        for (String item : ConfigUtil.loadInputHistory()) {
+            inputHistoryModel.addElement(item);
+        }
+        JTextField inputEditor = (JTextField) inputCombo.getEditor().getEditorComponent();
+        inputEditor.addActionListener(e -> sendInputText());
 
         controlContent.add(buildPlaceholder(), BorderLayout.CENTER);
         add(controlContent, BorderLayout.CENTER);
@@ -99,13 +110,30 @@ public class DeviceControlPanel extends JPanel {
         header.add(previewPanel, BorderLayout.EAST);
         header.add(buildKeyEventPanel(), BorderLayout.SOUTH);
 
-        panel.add(header, BorderLayout.NORTH);
+        JPanel topSection = new JPanel(new BorderLayout(8, 8));
+        topSection.add(header, BorderLayout.NORTH);
+        topSection.add(buildTextInputPanel(), BorderLayout.SOUTH);
+
+        panel.add(topSection, BorderLayout.NORTH);
         panel.add(buildFilePanel(), BorderLayout.CENTER);
         return panel;
     }
 
+    private JPanel buildTextInputPanel() {
+        JPanel panel = new JPanel(new BorderLayout(6, 0));
+        panel.setBorder(BorderFactory.createTitledBorder("输入文字"));
+
+        inputCombo.setPrototypeDisplayValue("这是一条用于估算宽度的历史输入示例文本");
+        JButton sendButton = new JButton("发送");
+        sendButton.addActionListener(e -> sendInputText());
+
+        panel.add(inputCombo, BorderLayout.CENTER);
+        panel.add(sendButton, BorderLayout.EAST);
+        return panel;
+    }
+
     private JPanel buildKeyEventPanel() {
-        JPanel panel = new JPanel(new GridLayout(2, 4, 6, 6));
+        JPanel panel = new JPanel(new GridLayout(2, 3, 6, 6));
         panel.setBorder(BorderFactory.createTitledBorder("设备控制"));
 
         panel.add(actionButton("Home", () -> adbService.keyEvent(KEYCODE_HOME)));
@@ -114,7 +142,6 @@ public class DeviceControlPanel extends JPanel {
         panel.add(actionButton("音量+", () -> adbService.keyEvent(KEYCODE_VOLUME_UP)));
         panel.add(actionButton("音量-", () -> adbService.keyEvent(KEYCODE_VOLUME_DOWN)));
         panel.add(actionButton("确认", () -> adbService.keyEvent(KEYCODE_ENTER)));
-        panel.add(actionButton("输入文字", this::promptInputText));
 
         return panel;
     }
@@ -207,11 +234,37 @@ public class DeviceControlPanel extends JPanel {
         previewButton.setText(running ? "停止预览" : "开始预览");
     }
 
-    private void promptInputText() {
-        String text = JOptionPane.showInputDialog(this, "输入要发送到设备的文字（支持中文）:", "ADB 输入", JOptionPane.PLAIN_MESSAGE);
-        if (text != null && !text.isBlank()) {
-            adbService.inputText(text);
+    private void sendInputText() {
+        if (adbService == null) {
+            return;
         }
+        Object item = inputCombo.getEditor().getItem();
+        String text = item == null ? "" : item.toString().trim();
+        if (text.isEmpty()) {
+            return;
+        }
+        adbService.inputText(text);
+        addToInputHistory(text);
+    }
+
+    private void addToInputHistory(String text) {
+        for (int i = inputHistoryModel.getSize() - 1; i >= 0; i--) {
+            if (text.equals(inputHistoryModel.getElementAt(i))) {
+                inputHistoryModel.removeElementAt(i);
+            }
+        }
+        inputHistoryModel.insertElementAt(text, 0);
+        while (inputHistoryModel.getSize() > ConfigUtil.MAX_INPUT_HISTORY) {
+            inputHistoryModel.removeElementAt(inputHistoryModel.getSize() - 1);
+        }
+        inputCombo.setSelectedIndex(0);
+        inputCombo.getEditor().setItem(text);
+
+        List<String> history = new ArrayList<>();
+        for (int i = 0; i < inputHistoryModel.getSize(); i++) {
+            history.add(inputHistoryModel.getElementAt(i));
+        }
+        ConfigUtil.saveInputHistory(history);
     }
 
     private void navigateUp() {
