@@ -19,7 +19,7 @@ public class GUI extends JFrame {
     private String scrcpyPath;
 
     public GUI() {
-        setTitle("Logan");
+        setTitle("Android Mobile Testing Tool");
         setSize(960, 640);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
 

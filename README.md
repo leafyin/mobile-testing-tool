@@ -129,7 +129,3 @@ input.history.1=上一条历史记录
 
 **Q: 无法访问 SDCard？**  
 部分 Android 版本限制 shell 访问，可尝试浏览 `/sdcard/DCIM` 等子目录。
-
-## License
-
-MIT（或按项目实际需要补充）
