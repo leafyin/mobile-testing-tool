@@ -1,6 +1,6 @@
-# Logan — Android 移动测试工具
+# Android Mobile Testing Tool
 
-Logan 是一款基于 Java Swing 的桌面工具，用于通过 ADB 管理 Android 测试设备。支持设备列表、屏幕镜像、按键控制、文字输入、SDCard 文件浏览与批量导出。
+基于 Java Swing 的桌面工具，用于通过 ADB 管理 Android 测试设备。支持设备列表、屏幕镜像、按键控制、文字输入、SDCard 文件浏览与批量导出。
 
 ## 功能
 
@@ -24,7 +24,18 @@ Logan 是一款基于 Java Swing 的桌面工具，用于通过 ADB 管理 Andro
 
 ## 快速开始
 
-### 1. 编译
+### 1. 构建（这个脚本你得自己写）
+
+直接运行构建脚本：
+
+```bash
+bash build.sh
+```
+
+产物：
+- `Android Mobile Testing Tool.app` — macOS 原生应用包（双击即可运行）
+
+### 2. 手动编译与运行
 
 ```bash
 cd mobile-testing-tool
@@ -36,8 +47,6 @@ javac -d out/production/mobile-testing-tool -sourcepath src \
   src/com/leaf/model/*.java \
   src/com/leaf/gui/*.java
 ```
-
-### 2. 运行
 
 ```bash
 java -cp out/production/mobile-testing-tool GUI
