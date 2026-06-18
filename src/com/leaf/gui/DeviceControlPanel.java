@@ -7,6 +7,7 @@ import com.leaf.utils.ConfigUtil;
 
 import javax.swing.*;
 import java.awt.*;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -16,8 +17,6 @@ public class DeviceControlPanel extends JPanel {
     private static final int KEYCODE_HOME = 3;
     private static final int KEYCODE_BACK = 4;
     private static final int KEYCODE_POWER = 26;
-    private static final int KEYCODE_VOLUME_UP = 24;
-    private static final int KEYCODE_VOLUME_DOWN = 25;
     private static final int KEYCODE_ENTER = 66;
 
     private final JLabel deviceLabel = new JLabel("未选择设备");
@@ -26,6 +25,7 @@ public class DeviceControlPanel extends JPanel {
     private final JList<RemoteEntry> fileList = new JList<>(fileModel);
     private final JPanel controlContent = new JPanel(new BorderLayout(8, 8));
     private final JButton previewButton = new JButton("开始预览");
+    private final JLabel exportPathLabel = new JLabel();
     private final DefaultComboBoxModel<String> inputHistoryModel = new DefaultComboBoxModel<>();
     private final JComboBox<String> inputCombo = new JComboBox<>(inputHistoryModel);
     private final ScrcpyService scrcpyService = new ScrcpyService();
@@ -49,6 +49,13 @@ public class DeviceControlPanel extends JPanel {
         }
         JTextField inputEditor = (JTextField) inputCombo.getEditor().getEditorComponent();
         inputEditor.addActionListener(e -> sendInputText());
+
+        String savedExportPath = ConfigUtil.loadExportPath();
+        if (savedExportPath != null && !savedExportPath.isBlank()) {
+            exportPathLabel.setText(savedExportPath);
+        } else {
+            exportPathLabel.setText("未设置");
+        }
 
         controlContent.add(buildPlaceholder(), BorderLayout.CENTER);
         add(controlContent, BorderLayout.CENTER);
@@ -133,14 +140,12 @@ public class DeviceControlPanel extends JPanel {
     }
 
     private JPanel buildKeyEventPanel() {
-        JPanel panel = new JPanel(new GridLayout(2, 3, 6, 6));
+        JPanel panel = new JPanel(new GridLayout(1, 4, 6, 6));
         panel.setBorder(BorderFactory.createTitledBorder("设备控制"));
 
         panel.add(actionButton("Home", () -> adbService.keyEvent(KEYCODE_HOME)));
         panel.add(actionButton("返回", () -> adbService.keyEvent(KEYCODE_BACK)));
         panel.add(actionButton("电源/关屏", () -> adbService.keyEvent(KEYCODE_POWER)));
-        panel.add(actionButton("音量+", () -> adbService.keyEvent(KEYCODE_VOLUME_UP)));
-        panel.add(actionButton("音量-", () -> adbService.keyEvent(KEYCODE_VOLUME_DOWN)));
         panel.add(actionButton("确认", () -> adbService.keyEvent(KEYCODE_ENTER)));
 
         return panel;
@@ -168,19 +173,33 @@ public class DeviceControlPanel extends JPanel {
         JButton refreshButton = new JButton("刷新");
         JButton exportButton = new JButton("批量导出");
         JButton mediaFilterButton = new JButton("仅媒体");
+        JButton deleteButton = new JButton("删除");
+        JButton exportDirButton = new JButton("导出目录");
 
         upButton.addActionListener(e -> navigateUp());
         refreshButton.addActionListener(e -> refreshFiles());
         exportButton.addActionListener(e -> exportSelectedFiles());
         mediaFilterButton.addActionListener(e -> showMediaOnly());
+        deleteButton.addActionListener(e -> deleteSelectedFiles());
+        exportDirButton.addActionListener(e -> chooseExportDirectory());
 
         buttons.add(upButton);
         buttons.add(refreshButton);
         buttons.add(mediaFilterButton);
         buttons.add(exportButton);
+        buttons.add(deleteButton);
+        buttons.add(exportDirButton);
         toolbar.add(buttons, BorderLayout.EAST);
 
-        panel.add(toolbar, BorderLayout.NORTH);
+        JPanel northPanel = new JPanel(new BorderLayout(0, 4));
+        northPanel.add(toolbar, BorderLayout.NORTH);
+
+        JPanel exportDirPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        exportDirPanel.add(new JLabel("导出位置: "));
+        exportDirPanel.add(exportPathLabel);
+        northPanel.add(exportDirPanel, BorderLayout.SOUTH);
+
+        panel.add(northPanel, BorderLayout.NORTH);
         panel.add(new JScrollPane(fileList), BorderLayout.CENTER);
         return panel;
     }
@@ -312,6 +331,22 @@ public class DeviceControlPanel extends JPanel {
         }
     }
 
+    private void chooseExportDirectory() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("选择默认导出目录");
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        String saved = ConfigUtil.loadExportPath();
+        if (saved != null && !saved.isBlank()) {
+            chooser.setCurrentDirectory(new File(saved));
+        }
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        String dir = chooser.getSelectedFile().getAbsolutePath();
+        exportPathLabel.setText(dir);
+        ConfigUtil.saveExportPath(dir);
+    }
+
     private void exportSelectedFiles() {
         List<RemoteEntry> selected = fileList.getSelectedValuesList();
         if (selected.isEmpty()) {
@@ -330,14 +365,20 @@ public class DeviceControlPanel extends JPanel {
             return;
         }
 
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("选择导出目录");
-        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
-            return;
+        String savedExportPath = ConfigUtil.loadExportPath();
+        String localDir;
+        if (savedExportPath != null && !savedExportPath.isBlank()) {
+            localDir = savedExportPath;
+        } else {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setDialogTitle("选择导出目录");
+            chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+            if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+                return;
+            }
+            localDir = chooser.getSelectedFile().getAbsolutePath();
         }
 
-        String localDir = chooser.getSelectedFile().getAbsolutePath();
         int successCount = adbService.pullMultiple(filePaths, localDir);
         int failCount = filePaths.size() - successCount;
 
@@ -356,5 +397,55 @@ public class DeviceControlPanel extends JPanel {
                 failCount > 0 ? "部分导出失败" : "导出完成",
                 failCount > 0 ? JOptionPane.WARNING_MESSAGE : JOptionPane.INFORMATION_MESSAGE
         );
+    }
+
+    private void deleteSelectedFiles() {
+        List<RemoteEntry> selected = fileList.getSelectedValuesList();
+        if (selected.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "请先选择一个或多个文件");
+            return;
+        }
+
+        List<RemoteEntry> files = selected.stream()
+                .filter(entry -> !entry.isDirectory())
+                .collect(Collectors.toList());
+
+        if (files.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "请选择文件（暂不支持删除目录）");
+            return;
+        }
+
+        StringBuilder fileListMsg = new StringBuilder("确定要删除以下 ").append(files.size()).append(" 个文件吗？\n\n");
+        for (RemoteEntry f : files) {
+            fileListMsg.append("  - ").append(f.getName()).append("\n");
+        }
+
+        int confirm = JOptionPane.showConfirmDialog(
+                this,
+                fileListMsg.toString(),
+                "确认删除",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+        );
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        List<String> paths = files.stream()
+                .map(RemoteEntry::getPath)
+                .collect(Collectors.toList());
+
+        int successCount = adbService.deleteFiles(paths);
+        int failCount = paths.size() - successCount;
+
+        JOptionPane.showMessageDialog(
+                this,
+                "成功删除 " + successCount + " / " + paths.size() + " 个文件"
+                        + (failCount > 0 ? "\n失败 " + failCount + " 个文件" : ""),
+                failCount > 0 ? "部分删除失败" : "删除完成",
+                failCount > 0 ? JOptionPane.WARNING_MESSAGE : JOptionPane.INFORMATION_MESSAGE
+        );
+
+        refreshFiles();
     }
 }

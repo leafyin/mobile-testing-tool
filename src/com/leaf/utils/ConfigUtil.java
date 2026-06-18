@@ -11,6 +11,7 @@ public class ConfigUtil {
     private static final Path CONFIG_FILE = CONFIG_DIR.resolve("config.properties");
     private static final String KEY_ADB_PATH = "adb.path";
     private static final String KEY_SCRCPY_PATH = "scrcpy.path";
+    private static final String KEY_EXPORT_PATH = "export.path";
     private static final String KEY_INPUT_HISTORY_PREFIX = "input.history.";
     public static final int MAX_INPUT_HISTORY = 20;
 
@@ -28,6 +29,14 @@ public class ConfigUtil {
 
     public static void saveScrcpyPath(String path) {
         saveProperty(KEY_SCRCPY_PATH, path);
+    }
+
+    public static String loadExportPath() {
+        return loadProperty(KEY_EXPORT_PATH);
+    }
+
+    public static void saveExportPath(String path) {
+        saveProperty(KEY_EXPORT_PATH, path);
     }
 
     public static java.util.List<String> loadInputHistory() {

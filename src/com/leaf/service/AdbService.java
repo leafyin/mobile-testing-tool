@@ -95,6 +95,17 @@ public class AdbService {
         return successCount;
     }
 
+    public int deleteFiles(List<String> remotePaths) {
+        int successCount = 0;
+        for (String remotePath : remotePaths) {
+            CmdUtil.ExecResult result = execShell("rm", remotePath);
+            if (result.isSuccess()) {
+                successCount++;
+            }
+        }
+        return successCount;
+    }
+
     public void keyEvent(int keyCode) {
         execShell("input", "keyevent", String.valueOf(keyCode));
     }
