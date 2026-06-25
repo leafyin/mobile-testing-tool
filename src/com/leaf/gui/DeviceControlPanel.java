@@ -7,7 +7,6 @@ import com.leaf.utils.ConfigUtil;
 
 import javax.swing.*;
 import java.awt.*;
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -25,7 +24,6 @@ public class DeviceControlPanel extends JPanel {
     private final JList<RemoteEntry> fileList = new JList<>(fileModel);
     private final JPanel controlContent = new JPanel(new BorderLayout(8, 8));
     private final JButton previewButton = new JButton("开始预览");
-    private final JLabel exportPathLabel = new JLabel();
     private final DefaultComboBoxModel<String> inputHistoryModel = new DefaultComboBoxModel<>();
     private final JComboBox<String> inputCombo = new JComboBox<>(inputHistoryModel);
     private final ScrcpyService scrcpyService = new ScrcpyService();
@@ -49,13 +47,6 @@ public class DeviceControlPanel extends JPanel {
         }
         JTextField inputEditor = (JTextField) inputCombo.getEditor().getEditorComponent();
         inputEditor.addActionListener(e -> sendInputText());
-
-        String savedExportPath = ConfigUtil.loadExportPath();
-        if (savedExportPath != null && !savedExportPath.isBlank()) {
-            exportPathLabel.setText(savedExportPath);
-        } else {
-            exportPathLabel.setText("未设置");
-        }
 
         controlContent.add(buildPlaceholder(), BorderLayout.CENTER);
         add(controlContent, BorderLayout.CENTER);
@@ -165,39 +156,29 @@ public class DeviceControlPanel extends JPanel {
             }
         });
 
-        JPanel toolbar = new JPanel(new BorderLayout(6, 0));
-        toolbar.add(pathLabel, BorderLayout.CENTER);
+        JPanel pathLine = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        pathLine.add(new JLabel("当前路径: "));
+        pathLine.add(pathLabel);
 
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         JButton upButton = new JButton("上级目录");
         JButton refreshButton = new JButton("刷新");
         JButton exportButton = new JButton("批量导出");
-        JButton mediaFilterButton = new JButton("仅媒体");
         JButton deleteButton = new JButton("删除");
-        JButton exportDirButton = new JButton("导出目录");
 
         upButton.addActionListener(e -> navigateUp());
         refreshButton.addActionListener(e -> refreshFiles());
         exportButton.addActionListener(e -> exportSelectedFiles());
-        mediaFilterButton.addActionListener(e -> showMediaOnly());
         deleteButton.addActionListener(e -> deleteSelectedFiles());
-        exportDirButton.addActionListener(e -> chooseExportDirectory());
 
-        buttons.add(upButton);
-        buttons.add(refreshButton);
-        buttons.add(mediaFilterButton);
-        buttons.add(exportButton);
-        buttons.add(deleteButton);
-        buttons.add(exportDirButton);
-        toolbar.add(buttons, BorderLayout.EAST);
+        toolbar.add(upButton);
+        toolbar.add(refreshButton);
+        toolbar.add(exportButton);
+        toolbar.add(deleteButton);
 
         JPanel northPanel = new JPanel(new BorderLayout(0, 4));
-        northPanel.add(toolbar, BorderLayout.NORTH);
-
-        JPanel exportDirPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        exportDirPanel.add(new JLabel("导出位置: "));
-        exportDirPanel.add(exportPathLabel);
-        northPanel.add(exportDirPanel, BorderLayout.SOUTH);
+        northPanel.add(pathLine, BorderLayout.NORTH);
+        northPanel.add(toolbar, BorderLayout.SOUTH);
 
         panel.add(northPanel, BorderLayout.NORTH);
         panel.add(new JScrollPane(fileList), BorderLayout.CENTER);
@@ -316,35 +297,6 @@ public class DeviceControlPanel extends JPanel {
         if (!result.success) {
             JOptionPane.showMessageDialog(this, "无法访问目录: " + currentPath, "错误", JOptionPane.ERROR_MESSAGE);
         }
-    }
-
-    private void showMediaOnly() {
-        if (adbService == null) {
-            return;
-        }
-        fileModel.clear();
-        AdbService.ListDirectoryResult result = adbService.listDirectory(currentPath);
-        for (RemoteEntry entry : result.entries) {
-            if (entry.isDirectory() || entry.isMediaFile()) {
-                fileModel.addElement(entry);
-            }
-        }
-    }
-
-    private void chooseExportDirectory() {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("选择默认导出目录");
-        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-        String saved = ConfigUtil.loadExportPath();
-        if (saved != null && !saved.isBlank()) {
-            chooser.setCurrentDirectory(new File(saved));
-        }
-        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
-            return;
-        }
-        String dir = chooser.getSelectedFile().getAbsolutePath();
-        exportPathLabel.setText(dir);
-        ConfigUtil.saveExportPath(dir);
     }
 
     private void exportSelectedFiles() {

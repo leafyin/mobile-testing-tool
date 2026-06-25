@@ -11,6 +11,7 @@ public class GUI extends JFrame {
 
     private final JLabel adbPathLabel = new JLabel("未选择");
     private final JLabel scrcpyPathLabel = new JLabel("未选择");
+    private final JLabel exportPathLabel = new JLabel("未设置");
     private final DefaultListModel<String> deviceModel = new DefaultListModel<>();
     private final JList<String> deviceList = new JList<>(deviceModel);
     private final DeviceControlPanel deviceControlPanel = new DeviceControlPanel();
@@ -40,6 +41,14 @@ public class GUI extends JFrame {
             scrcpyPathLabel.setForeground(Color.GRAY);
         }
         deviceControlPanel.setScrcpyPath(scrcpyPath);
+
+        String savedExportPath = ConfigUtil.loadExportPath();
+        if (savedExportPath != null && !savedExportPath.isBlank()) {
+            exportPathLabel.setText(savedExportPath);
+            exportPathLabel.setForeground(Color.BLACK);
+        } else {
+            exportPathLabel.setForeground(Color.GRAY);
+        }
 
         deviceList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         deviceList.addListSelectionListener(e -> {
@@ -117,6 +126,21 @@ public class GUI extends JFrame {
         scrcpyDirButton.addActionListener(e -> chooseScrcpyPath());
         panel.add(scrcpyDirButton, gbc);
 
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        gbc.weightx = 0;
+        panel.add(new JLabel("导出位置:"), gbc);
+
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        panel.add(exportPathLabel, gbc);
+
+        gbc.gridx = 2;
+        gbc.weightx = 0;
+        JButton exportDirButton = new JButton("选择目录");
+        exportDirButton.addActionListener(e -> chooseExportDir());
+        panel.add(exportDirButton, gbc);
+
         return panel;
     }
 
@@ -165,6 +189,23 @@ public class GUI extends JFrame {
         scrcpyPathLabel.setForeground(Color.BLACK);
         ConfigUtil.saveScrcpyPath(scrcpyPath);
         deviceControlPanel.setScrcpyPath(scrcpyPath);
+    }
+
+    private void chooseExportDir() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("选择默认导出目录");
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        String saved = ConfigUtil.loadExportPath();
+        if (saved != null && !saved.isBlank()) {
+            chooser.setCurrentDirectory(new File(saved));
+        }
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        String dir = chooser.getSelectedFile().getAbsolutePath();
+        exportPathLabel.setText(dir);
+        exportPathLabel.setForeground(Color.BLACK);
+        ConfigUtil.saveExportPath(dir);
     }
 
     private void refreshDevices() {
